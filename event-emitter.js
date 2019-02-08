@@ -8,7 +8,6 @@ class EventEmitter {
     };
     
     on = function (event, listener) {
-        console.log("on ", event);
         if (typeof this.events[event] !== 'object') {
             this.events[event] = [];
         }

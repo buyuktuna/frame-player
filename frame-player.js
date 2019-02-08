@@ -8,34 +8,61 @@
     }
 
     var downloadFinished = false;
-    var dataUris = [];
+    var loadingContainer = document.getElementsByClassName('loading-container')[0];
     var frames = [];
+    var timer = null;
+    var currentFrame = 0;
+    var playing = false;
+
 
     class FramePlayer extends EventEmitter{
         
         constructor (id) {
             super();
             this.init(id);
+            
         }
 
         init(id) {
             this.containerId = id;
             this.container = document.getElementById(id);
             this.canvas = document.createElement("canvas")
-            this.canvas.id = "player";
+            this.canvas.id = "canvas";
             this.canvas.width = config.width;
             this.canvas.height = config.height;
             this.container.appendChild(this.canvas);
         }
         
         play() {
-
+            playing = true;
+            drawFrame();
+            this.emit("play", currentFrame * 1000 / config.frameRate)
         }
-
+        
         pause() {
+            playing = false;
+            clearTimeout(timer);
+            this.emit("pause", currentFrame * 1000 / config.frameRate)
+        }
+    }
 
+    function drawFrame(){
+        var ctx = player.canvas.getContext('2d');
+        var image = new Image(config.width, config.height);
+        image.src = frames[currentFrame]
+        image.onload = () => {
+            ctx.drawImage(image, 0, 0);
         }
 
+        if(playing){
+            // currentFrame = (currentFrame + 1) % frames.length;
+            currentFrame++;
+            if(currentFrame === frames.length){
+                currentFrame = 0;
+                player.emit("end");
+            }
+            timer = setTimeout(drawFrame, 1000 / config.frameRate);
+        }
     }
 
     function downloadImg(index) {
@@ -50,7 +77,8 @@
             extractFrames(player, this, index);
         };
 
-        image.onError = function () {
+        image.onError = function (err) {
+            console.log("error, ", err)
             return null;
         }
 
@@ -64,9 +92,8 @@
             var h = config.height / 5;
             for(var i = 0; i < 5; i++){
                 for(var j = 0; j < 5; j++){
-                    ctx.drawImage(img, j * w, i * h, w, h, 
-                                       0, 0, canvas.width, canvas.height);
-                    dataUris.push(canvas.toDataURL('image/jpeg'));
+                    ctx.drawImage(img, j * w, i * h, w, h, 0, 0, canvas.width, canvas.height);
+                    frames.push(canvas.toDataURL('image/jpeg'));
                 }
             }
             player.emit("extractcomplete", index);
@@ -77,40 +104,53 @@
         console.log("extraction complete of ", index);
         if(index < 6){
             downloadImg(index+1)
+        }else{
+            player.emit("downloadcomplete");
         }
-        player.emit("downloadcomplete");
-        
-
     }
 
     function onDownloadComplete(){
-        console.log("all is downloaded and frames are extracted");  
+        console.log("all is downloaded and frames are extracted"); 
         downloadFinished = true;
-
-        // var c = document.getElementById("test");
-        // c.width = config.width;
-        // c.height = config.height;
-        
-        var frameNo = 0;
-        var showFrames = setInterval(() => {
-            console.log("frameno: ", dataUris[frameNo])
-            var i = new Image(config.width, config.height);
-            i.src = dataUris[frameNo++]
-            // c.getContext('2d').drawImage(i, 0, 0);
-            player.canvas.getContext('2d').drawImage(i, 0, 0);
-            if(frameNo === dataUris.length){
-                clearInterval(showFrames);
-            }
-
-        }, 1000/config.frameRate);
-
-        
+        loadingContainer.style.display="none";
+        //player.play();
     }
 
+    function onPlay(ms) {
+        console.log("on play", ms);
+    }
+    
+    function onPause(ms) {
+        console.log("on pause", ms);
+        
+    }
+    
+    function onEnd() {
+        playing = false;
+        console.log("on end")
+    }
+
+    function onClick() {
+        console.log("onclick");
+        if(!downloadFinished){
+            return;
+        }
+        if(playing){
+            player.pause();
+        }else{
+            player.play();
+        }
+    }
+
+
     var player = new FramePlayer("container");
+    player.container.addEventListener("click", onClick)
     player.on("extractcomplete", (index) => onExtractComplete(index))
     player.on("downloadcomplete", () => onDownloadComplete())
-    var img = downloadImg(0);
+    player.on("play", (ms) => onPlay(ms))
+    player.on("pause", (ms) => onPause(ms))
+    player.on("end", () => onEnd())
+    var img = downloadImg(0); // this will trigger downloads of remaining images
 
     
     
