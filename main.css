@@ -30,7 +30,7 @@
 }
 
 #progress {
-    position: absolute;
+    width: 0px;
     height: 100%;
     background-color: rgba(172, 49, 49, 0.7);
 }

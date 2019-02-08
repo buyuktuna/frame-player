@@ -18,17 +18,9 @@
     var downloadStartTime = null;
     var downloadFinishTime = null;
 
+    var steps = [];
     var progressBar = document.getElementById("progress-bar");
-    progressBar.addEventListener("click", seek)
-
-    function seek(evt){
-        var offsetX = evt.offsetX;
-        var percentage = (offsetX / config.width).toFixed(2);
-        console.log(percentage);
-        currentFrame = Math.floor(frameCount * percentage);
-        drawFrame();
-        evt.stopPropagation();
-    }
+    var progress = document.getElementById("progress");
 
     class FramePlayer extends EventEmitter{
         
@@ -58,6 +50,19 @@
         }
     }
 
+    //init player
+    var player = new FramePlayer("container");
+    player.container.addEventListener("click", togglePlay)
+    player.on("downloadcomplete", () => onDownloadComplete())
+    player.on("extractcomplete", () => onExtractComplete())
+    player.on("play", (ms) => onPlay(ms))
+    player.on("pause", (ms) => onPause(ms))
+    player.on("end", () => onEnd());
+    progressBar.addEventListener("click", seek)
+    initProgressBar();
+    initDownload();
+
+    //functions
     function drawFrame(){
         var ctx = player.canvas.getContext('2d');
         var image = new Image(config.width, config.height);
@@ -66,6 +71,10 @@
             ctx.drawImage(image, 0, 0);
         }
 
+        var percentage = (currentFrame / frameCount).toFixed(2);
+        var stepIndex = findNearestStep(percentage * 100);
+        updateProgress(stepIndex);
+        
         if(playing){
             currentFrame++;
             if(currentFrame === frames.length){
@@ -111,7 +120,7 @@
                 }
             }
         }
-        player.emit("extractcomplete", k);
+        player.emit("extractcomplete");
     }
 
     function onExtractComplete(){
@@ -124,7 +133,6 @@
         downloadFinished = true;
         downloadFinishTime = new Date().getTime();
         player.canvas.getContext("2d").clearRect(0,0,config.width, config.height);
-        
         console.log("images downloaded in ", downloadFinishTime - downloadStartTime + "ms"); 
         extractFrames(player)
     }
@@ -153,14 +161,46 @@
         }
     }
 
-    var player = new FramePlayer("container");
-    player.container.addEventListener("click", togglePlay)
-    player.on("downloadcomplete", () => onDownloadComplete())
-    player.on("extractcomplete", () => onExtractComplete())
-    player.on("play", (ms) => onPlay(ms))
-    player.on("pause", (ms) => onPause(ms))
-    player.on("end", () => onEnd())
-    initDownload();
+    function initProgressBar(){
+        var stepSize = (frameCount / 100);
+        var step = 0;
+        while(step < 100){
+            steps.push(step);
+            step += stepSize;
+        }
+    }
 
+    function findNearestStep(percentage) {
+        var diffToLarger, diffToSmaller, index;
+        for(var i = 1; i < steps.length; i++){
+            if(percentage < steps[i]){
+                diffToLarger = steps[i] - percentage;
+                diffToSmaller = percentage - steps[i-1];
+                index = i;
+                break;
+            }
+        }
+        if(diffToLarger > diffToSmaller){
+            return index-1;
+        }else{
+            return index;
+        }
+    }
+
+    function seek(evt){
+        clearTimeout(timer);
+        var offsetX = evt.offsetX;
+        var percentage = (offsetX / config.width).toFixed(2);
+        var stepIndex = findNearestStep(percentage * 100);
+        updateProgress(stepIndex);
+        currentFrame = Math.floor(frameCount * percentage);
+        drawFrame();
+        evt.stopPropagation();
+    }
+
+    function updateProgress(stepIndex){
+        var progressWidth = steps[stepIndex];
+        progress.style.width = progressWidth+"%";
+    }
     
 })();
