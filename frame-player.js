@@ -8,28 +8,40 @@
     }
 
     var downloadFinished = false;
-    var loadingContainer = document.getElementsByClassName('loading-container')[0];
+    var loadingContainer = document.getElementsByClassName("loading-container")[0];
+    var images = [];
     var frames = [];
     var timer = null;
     var currentFrame = 0;
+    var frameCount = 7 * 25;
     var playing = false;
+    var downloadStartTime = null;
+    var downloadFinishTime = null;
 
+    var progressBar = document.getElementById("progress-bar");
+    progressBar.addEventListener("click", seek)
+
+    function seek(evt){
+        var offsetX = evt.offsetX;
+        var percentage = (offsetX / config.width).toFixed(2);
+        console.log(percentage);
+        currentFrame = Math.floor(frameCount * percentage);
+        drawFrame();
+        evt.stopPropagation();
+    }
 
     class FramePlayer extends EventEmitter{
         
         constructor (id) {
             super();
-            this.init(id);
-            
+            this._init(id);
         }
 
-        init(id) {
+        _init(id) {
             this.containerId = id;
             this.container = document.getElementById(id);
             this.canvas = document.createElement("canvas")
             this.canvas.id = "canvas";
-            this.canvas.width = config.width;
-            this.canvas.height = config.height;
             this.container.appendChild(this.canvas);
         }
         
@@ -49,13 +61,12 @@
     function drawFrame(){
         var ctx = player.canvas.getContext('2d');
         var image = new Image(config.width, config.height);
-        image.src = frames[currentFrame]
+        image.src = frames[currentFrame];
         image.onload = () => {
             ctx.drawImage(image, 0, 0);
         }
 
         if(playing){
-            // currentFrame = (currentFrame + 1) % frames.length;
             currentFrame++;
             if(currentFrame === frames.length){
                 currentFrame = 0;
@@ -65,8 +76,12 @@
         }
     }
 
+    function initDownload() {
+        downloadStartTime = new Date().getTime();
+        downloadImg(0);
+    }
+
     function downloadImg(index) {
-        
         var image = new Image();
         image.crossOrigin="anonymous";
         
@@ -74,55 +89,52 @@
         image.src = url;
         
         image.onload = function () {
-            extractFrames(player, this, index);
+            images.push(image);
+            if(index < 6){
+                downloadImg(index + 1);
+            }else{
+                player.emit("downloadcomplete")
+            }
         };
-
-        image.onError = function (err) {
-            console.log("error, ", err)
-            return null;
-        }
-
     }
 
-    function extractFrames(player, img, index) {
-        if(img){
-            var canvas = player.canvas;
-            var ctx = canvas.getContext('2d');
-            var w = config.width / 5;
-            var h = config.height / 5;
+    function extractFrames(player) {
+        var canvas = player.canvas;
+        var ctx = canvas.getContext('2d');
+        var w = config.width / 5;
+        var h = config.height / 5;
+        for(var k = 0; k < images.length; k++){
             for(var i = 0; i < 5; i++){
                 for(var j = 0; j < 5; j++){
-                    ctx.drawImage(img, j * w, i * h, w, h, 0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(images[k], j * w, i * h, w, h, 0, 0, canvas.width, canvas.height);
                     frames.push(canvas.toDataURL('image/jpeg'));
                 }
             }
-            player.emit("extractcomplete", index);
         }
+        player.emit("extractcomplete", k);
     }
 
-    function onExtractComplete(index){
-        console.log("extraction complete of ", index);
-        if(index < 6){
-            downloadImg(index+1)
-        }else{
-            player.emit("downloadcomplete");
-        }
+    function onExtractComplete(){
+        loadingContainer.style.display="none";
+        var extractFinishTime = new Date().getTime();
+        console.log("extraction of frames complete in ", extractFinishTime - downloadFinishTime , "ms");
     }
 
     function onDownloadComplete(){
-        console.log("all is downloaded and frames are extracted"); 
         downloadFinished = true;
-        loadingContainer.style.display="none";
-        //player.play();
+        downloadFinishTime = new Date().getTime();
+        player.canvas.getContext("2d").clearRect(0,0,config.width, config.height);
+        
+        console.log("images downloaded in ", downloadFinishTime - downloadStartTime + "ms"); 
+        extractFrames(player)
     }
 
     function onPlay(ms) {
-        console.log("on play", ms);
+        console.log("on play", ms, "ms");
     }
     
     function onPause(ms) {
-        console.log("on pause", ms);
-        
+        console.log("video is paused at", ms, "ms");
     }
     
     function onEnd() {
@@ -130,8 +142,7 @@
         console.log("on end")
     }
 
-    function onClick() {
-        console.log("onclick");
+    function togglePlay() {
         if(!downloadFinished){
             return;
         }
@@ -142,17 +153,14 @@
         }
     }
 
-
     var player = new FramePlayer("container");
-    player.container.addEventListener("click", onClick)
-    player.on("extractcomplete", (index) => onExtractComplete(index))
+    player.container.addEventListener("click", togglePlay)
     player.on("downloadcomplete", () => onDownloadComplete())
+    player.on("extractcomplete", () => onExtractComplete())
     player.on("play", (ms) => onPlay(ms))
     player.on("pause", (ms) => onPause(ms))
     player.on("end", () => onEnd())
-    var img = downloadImg(0); // this will trigger downloads of remaining images
+    initDownload();
 
-    
-    
     
 })();
