@@ -22,6 +22,35 @@
     var progressBar = document.getElementById("progress-bar");
     var progress = document.getElementById("progress");
 
+    class EventEmitter {
+        constructor () {
+            this.events = {};
+        };
+        
+        on = function (event, listener) {
+            if (typeof this.events[event] !== 'object') {
+                this.events[event] = [];
+            }
+            this.events[event].push(listener);
+        };
+        
+        removeListener = function (event, listener) {
+            var idx;
+            if (typeof this.events[event] === 'object') {
+                idx = indexOf(this.events[event], listener);
+                if (idx > -1) {
+                    this.events[event].splice(idx, 1);
+                }
+            }
+        };
+        
+        emit(event, ...args) {
+            if (typeof this.events[event] === 'object') {
+                this.events[event].forEach(listener => listener.apply(this, args));
+            }
+        }
+    }
+
     class FramePlayer extends EventEmitter{
         
         constructor (id) {
@@ -50,7 +79,7 @@
         }
     }
 
-    //init player
+    //init player and 
     var player = new FramePlayer("container");
     player.container.addEventListener("click", togglePlay)
     player.on("downloadcomplete", () => onDownloadComplete())
@@ -62,7 +91,7 @@
     initProgressBar();
     initDownload();
 
-    //functions
+    //#region rendering
     function drawFrame(){
         var ctx = player.canvas.getContext('2d');
         var image = new Image(config.width, config.height);
@@ -84,12 +113,14 @@
             timer = setTimeout(drawFrame, 1000 / config.frameRate);
         }
     }
+    //#endregion rendering
 
+    //#region getting input
     function initDownload() {
         downloadStartTime = new Date().getTime();
         downloadImg(0);
     }
-
+    
     function downloadImg(index) {
         var image = new Image();
         image.crossOrigin="anonymous";
@@ -106,7 +137,8 @@
             }
         };
     }
-
+    //extractFrames function extracts each frame from image and store them in frames array 
+    //at the end emits extractcomplete
     function extractFrames(player) {
         var canvas = player.canvas;
         var ctx = canvas.getContext('2d');
@@ -122,34 +154,9 @@
         }
         player.emit("extractcomplete");
     }
+    //#endregion input
 
-    function onExtractComplete(){
-        loadingContainer.style.display="none";
-        var extractFinishTime = new Date().getTime();
-        console.log("extraction of frames complete in ", extractFinishTime - downloadFinishTime , "ms");
-    }
-
-    function onDownloadComplete(){
-        downloadFinished = true;
-        downloadFinishTime = new Date().getTime();
-        player.canvas.getContext("2d").clearRect(0,0,config.width, config.height);
-        console.log("images downloaded in ", downloadFinishTime - downloadStartTime + "ms"); 
-        extractFrames(player)
-    }
-
-    function onPlay(ms) {
-        console.log("on play", ms, "ms");
-    }
-    
-    function onPause(ms) {
-        console.log("video is paused at", ms, "ms");
-    }
-    
-    function onEnd() {
-        playing = false;
-        console.log("on end")
-    }
-
+    //#region Event listeners
     function togglePlay() {
         if(!downloadFinished){
             return;
@@ -161,6 +168,36 @@
         }
     }
 
+    function onExtractComplete(){
+        var extractFinishTime = new Date().getTime();
+        console.log("extraction of frames complete in ", extractFinishTime - downloadFinishTime + "ms");
+        loadingContainer.style.display="none";
+    }
+
+    function onDownloadComplete(){
+        downloadFinished = true;
+        downloadFinishTime = new Date().getTime();
+        player.canvas.getContext("2d").clearRect(0,0,config.width, config.height);
+        console.log("images downloaded in ", downloadFinishTime - downloadStartTime + "ms"); 
+        extractFrames(player)
+    }
+
+    function onPlay(ms) {
+        console.log("on play", ms + "ms");
+    }
+    
+    function onPause(ms) {
+        console.log("video is paused at", ms + "ms");
+    }
+    
+    function onEnd() {
+        playing = false;
+        console.log("on end")
+    }
+    //#endregion event listeners
+
+
+    //#region progress bar
     function initProgressBar(){
         var stepSize = (frameCount / 100);
         var step = 0;
@@ -202,5 +239,6 @@
         var progressWidth = steps[stepIndex];
         progress.style.width = progressWidth+"%";
     }
+    //#endregion
     
 })();
